@@ -1,0 +1,95 @@
+-- =====================================================
+-- RIZOS DE ORO — Añadir columna porosidad_recomendada
+-- Pegar en: Supabase → SQL Editor → New query → RUN
+-- =====================================================
+
+-- 1. Añadir columna (por defecto 'todas' para no romper nada existente)
+ALTER TABLE ingredientes
+  ADD COLUMN IF NOT EXISTS porosidad_recomendada text NOT NULL DEFAULT 'todas'
+  CHECK (porosidad_recomendada IN ('todas','alta','media','baja','alta,media','media,baja'));
+
+-- =====================================================
+-- 2. Actualizar ingredientes según ciencia capilar
+-- =====================================================
+
+-- POROSIDAD ALTA: necesita proteínas, aceites pesados, sellantes intensos
+-- El cabello de alta porosidad pierde humedad rápido y la absorbe rápido
+
+-- Proteínas → ideales para alta porosidad (reparan cutícula abierta)
+UPDATE ingredientes SET porosidad_recomendada = 'alta'
+WHERE nombre_inci ILIKE ANY(ARRAY[
+  '%Hydrolyzed Keratin%','%Hydrolyzed Wheat Protein%','%Hydrolyzed Collagen%',
+  '%Hydrolyzed Silk%','%Hydrolyzed Soy Protein%','%Hydrolyzed Rice Protein%',
+  '%Hydrolyzed Corn Protein%','%Hydrolyzed Oat Protein%','%Hydrolyzed Quinoa Protein%',
+  '%Keratin%','%Wheat Amino Acids%','%Rice Amino Acids%','%Silk Amino Acids%',
+  '%Amino Acids%','%Acetyl Tetrapeptide%','%Peptide%'
+]);
+
+-- Aceites pesados y mantecas → sellan la cutícula abierta de alta porosidad
+UPDATE ingredientes SET porosidad_recomendada = 'alta'
+WHERE nombre_inci ILIKE ANY(ARRAY[
+  '%Ricinus Communis%','%Castor%',
+  '%Butyrospermum Parkii%','%Shea%',
+  '%Mangifera Indica%','%Mango Butter%',
+  '%Theobroma Cacao%','%Cocoa Butter%',
+  '%Cocos Nucifera%','%Coconut Oil%',
+  '%Avocado%','%Persea Gratissima%',
+  '%Olive%','%Olea Europaea%'
+]);
+
+-- POROSIDAD BAJA: cutícula muy cerrada, le cuesta absorber.
+-- Necesita productos ligeros, calor para abrir cutícula, evitar proteínas y aceites pesados
+
+-- Aceites ligeros → los únicos que penetran la cutícula cerrada
+UPDATE ingredientes SET porosidad_recomendada = 'media,baja'
+WHERE nombre_inci ILIKE ANY(ARRAY[
+  '%Argania Spinosa%','%Argan%',
+  '%Helianthus Annuus%','%Sunflower%',
+  '%Simmondsia Chinensis%','%Jojoba%',
+  '%Prunus Amygdalus%','%Sweet Almond%',
+  '%Camellia%','%Green Tea Seed%',
+  '%Grape Seed%','%Vitis Vinifera%',
+  '%Rosehip%','%Rosa Canina%'
+]);
+
+-- Proteínas → EVITAR en baja porosidad (no penetran y se acumulan)
+-- Ya están en 'alta', pero añadimos nota: no cambiamos clasificación,
+-- el código lo usará para advertir
+
+-- Humectantes ligeros → mejor para media y baja (no pesan)
+UPDATE ingredientes SET porosidad_recomendada = 'todas'
+WHERE nombre_inci ILIKE ANY(ARRAY[
+  '%Glycerin%','%Glycerol%',
+  '%Aloe Barbadensis%','%Aloe Vera%',
+  '%Panthenol%',
+  '%Hyaluronic Acid%','%Sodium Hyaluronate%',
+  '%Sorbitol%',
+  '%Honey%','%Mel%'
+]);
+
+-- Surfactantes suaves → buenos para todas
+UPDATE ingredientes SET porosidad_recomendada = 'todas'
+WHERE nombre_inci ILIKE ANY(ARRAY[
+  '%Cocamidopropyl Betaine%',
+  '%Sodium Cocoyl%',
+  '%Disodium Lauryl%',
+  '%Sodium Lauroyl%'
+]);
+
+-- Acondicionadores catiónicos → todos sirven
+UPDATE ingredientes SET porosidad_recomendada = 'todas'
+WHERE nombre_inci ILIKE ANY(ARRAY[
+  '%Behentrimonium%','%Cetrimonium%','%Guar Hydroxy%'
+]);
+
+-- Ingredientes problemáticos (rojo) → para todas (ya son malos para todas)
+UPDATE ingredientes SET porosidad_recomendada = 'todas'
+WHERE clasificacion = 'rojo';
+
+-- =====================================================
+-- 3. Verificar resultado
+-- =====================================================
+SELECT porosidad_recomendada, COUNT(*) as total
+FROM ingredientes
+GROUP BY porosidad_recomendada
+ORDER BY total DESC;

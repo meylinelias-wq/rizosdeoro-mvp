@@ -1,0 +1,322 @@
+@import "tailwindcss";
+
+:root {
+  /* ── Paleta Rizos de Oro — Tema Claro Premium ── */
+  --bg:           #f4effb;   /* lavanda muy claro — fondo principal */
+  --bg-card:      #ffffff;   /* cards — blanco puro */
+  --bg-card2:     #f0eaf8;   /* inputs, hover suave */
+
+  --lila:         #B981DA;   /* principal — logo, acento, identidad */
+  --lila-dark:    #534274;   /* secundario — texto, elementos clave */
+  --lila-deep:    #3d2e5a;   /* profundidad extra */
+
+  --oro:          #d3ae37;   /* dorado — CTAs, highlights premium */
+  --oro-suave:    #c6a961;   /* dorado suave */
+
+  --blanco:       #FFFFFF;
+  --texto:        #534274;   /* morado oscuro — texto principal */
+  --texto-mid:    #6b5a8a;   /* texto secundario */
+  --texto-suave:  #9b8ab0;   /* texto suave / placeholders */
+
+  --borde:        rgba(83,66,116,0.12);   /* borde lila muy sutil */
+  --borde-oro:    rgba(211,174,55,0.4);   /* borde dorado */
+
+  /* Semáforo — adaptado a fondo claro */
+  --verde:        #16a34a;
+  --verde-bg:     #f0fdf4;
+  --verde-borde:  #bbf7d0;
+
+  --amarillo:     #d97706;
+  --amarillo-bg:  #fffbeb;
+  --amarillo-borde: #fde68a;
+
+  --rojo:         #dc2626;
+  --rojo-bg:      #fef2f2;
+  --rojo-borde:   #fecaca;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--texto);
+  font-family: var(--font-inter), var(--font-sans), system-ui, sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── TIPOGRAFÍA DE MARCA ── */
+
+.t-display {
+  font-family: var(--font-bebas), 'Impact', sans-serif;
+  letter-spacing: 0.04em;
+  line-height: 0.95;
+  color: var(--lila-dark);
+}
+
+.t-titulo {
+  font-family: var(--font-bebas), 'Impact', sans-serif;
+  letter-spacing: 0.04em;
+  color: var(--lila-dark);
+}
+
+.t-elegante {
+  font-family: var(--font-playfair), Georgia, serif;
+  color: var(--texto-mid);
+}
+
+.t-script {
+  font-family: var(--font-script), cursive;
+  color: var(--lila);
+}
+
+.t-script-oro {
+  font-family: var(--font-script), cursive;
+  color: var(--oro);
+}
+
+.t-body {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  color: var(--texto-mid);
+  line-height: 1.65;
+}
+
+.label {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+  font-weight: 600;
+}
+
+.label-oro {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--oro);
+  font-weight: 700;
+}
+
+.label-lila {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lila);
+  font-weight: 700;
+}
+
+/* ── LÍNEA decorativa ── */
+.linea-oro {
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--lila), var(--oro));
+}
+
+.divisor {
+  height: 1px;
+  background: var(--borde);
+}
+
+/* ── CARDS ── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--borde);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 2px 12px rgba(83,66,116,0.07);
+}
+
+.card-oro {
+  background: var(--bg-card);
+  border: 1px solid var(--borde-oro);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 16px rgba(211,174,55,0.10);
+}
+
+/* ── BOTONES ── */
+.btn-primary {
+  background: linear-gradient(135deg, var(--oro), #c8a430);
+  color: #fff;
+  padding: 0.9rem 1.75rem;
+  border-radius: 12px;
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  box-shadow: 0 4px 14px rgba(211,174,55,0.35);
+}
+
+.btn-primary:hover { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(211,174,55,0.4); }
+.btn-primary:active { transform: translateY(0); }
+
+.btn-outline {
+  background: transparent;
+  color: var(--lila);
+  padding: 0.9rem 1.75rem;
+  border-radius: 12px;
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: background 0.2s, border-color 0.2s;
+  border: 1.5px solid var(--lila);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.btn-outline:hover { background: rgba(185,129,218,0.08); }
+
+/* ── CHIPS SEMÁFORO ── */
+.chip-verde {
+  background: var(--verde-bg);
+  color: var(--verde);
+  border: 1px solid var(--verde-borde);
+  padding: 0.2rem 0.7rem;
+  border-radius: 20px;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chip-amarillo {
+  background: var(--amarillo-bg);
+  color: var(--amarillo);
+  border: 1px solid var(--amarillo-borde);
+  padding: 0.2rem 0.7rem;
+  border-radius: 20px;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chip-rojo {
+  background: var(--rojo-bg);
+  color: var(--rojo);
+  border: 1px solid var(--rojo-borde);
+  padding: 0.2rem 0.7rem;
+  border-radius: 20px;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ── INPUTS ── */
+input, textarea, select {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border-radius: 12px;
+  border: 1.5px solid var(--borde);
+  background: var(--bg-card);
+  color: var(--texto);
+  font-size: 0.9rem;
+  font-family: var(--font-inter), system-ui, sans-serif;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+  box-shadow: 0 1px 4px rgba(83,66,116,0.06);
+}
+
+input:focus, textarea:focus {
+  border-color: var(--lila);
+  box-shadow: 0 0 0 3px rgba(185,129,218,0.12);
+}
+input::placeholder, textarea::placeholder { color: var(--texto-suave); font-size: 0.85rem; }
+
+/* ── OPCIÓN SELECCIONABLE ── */
+.opcion {
+  width: 100%;
+  text-align: left;
+  padding: 1rem 1.125rem;
+  border-radius: 12px;
+  border: 1.5px solid var(--borde);
+  background: var(--bg-card);
+  color: var(--texto);
+  cursor: pointer;
+  transition: all 0.18s;
+  box-shadow: 0 1px 4px rgba(83,66,116,0.05);
+}
+
+.opcion:hover { border-color: var(--lila); background: #faf7fd; }
+
+.opcion-activa {
+  background: rgba(185,129,218,0.08) !important;
+  border-color: var(--lila) !important;
+  box-shadow: 0 0 0 3px rgba(185,129,218,0.12) !important;
+}
+
+/* ── ALIAS TIPOGRAFÍA ── */
+.titulo-grande {
+  font-family: var(--font-bebas), 'Impact', sans-serif;
+  letter-spacing: 0.03em;
+  line-height: 0.95;
+}
+
+.titulo-seccion {
+  font-family: var(--font-bebas), 'Impact', sans-serif;
+  letter-spacing: 0.03em;
+}
+
+/* ── TIP BOX ── */
+.tip-box {
+  background: rgba(211,174,55,0.06);
+  border: 1px solid var(--borde-oro);
+  border-radius: 12px;
+  padding: 0.875rem 1rem;
+}
+
+/* ── ANIMACIONES ── */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50%       { opacity: 1;   transform: scale(1.1); }
+}
+
+/* Shimmer sobre card-oro */
+.card-oro { position: relative; overflow: hidden; }
+.card-oro::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(185,129,218,0.06), transparent);
+  animation: shimmer 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.resultado-enter {
+  animation: fadeSlideUp 0.4s ease-out both;
+}
+
+/* padding-bottom para BottomNav */
+.pb-nav { padding-bottom: 84px; }

@@ -4,8 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "@/components/ui/BottomNav";
 
-type Modo = "elegir" | "barras" | "foto";
-type Estado = "idle" | "buscando-barras" | "procesando-ocr" | "listo" | "error";
+type Estado = "escaneando" | "procesando-ocr" | "listo" | "error";
 
 interface ProductoOBF {
   nombre: string;
@@ -22,27 +21,32 @@ export default function Escaner() {
   const zxingRef = useRef<unknown>(null);
   const scanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [modo, setModo] = useState<Modo>("elegir");
-  const [estado, setEstado] = useState<Estado>("idle");
+  const [estado, setEstado] = useState<Estado>("escaneando");
   const [textoExtraido, setTextoExtraido] = useState("");
   const [imagenUrl, setImagenUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [productoEncontrado, setProductoEncontrado] = useState<ProductoOBF | null>(null);
-  const [mensajeBarras, setMensajeBarras] = useState("Apunta la camara al codigo de barras");
-  const [mensajeOCR, setMensajeOCR] = useState("Analizando imagen...");
+  const [cameraLista, setCameraLista] = useState(false);
 
+  // Arrancar escáner de barras automáticamente al montar
   useEffect(() => {
+    iniciarEscanerBarras();
     return () => {
-      if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      detenerCamara();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function detenerCamara() {
+    if (scanIntervalRef.current) { clearInterval(scanIntervalRef.current); scanIntervalRef.current = null; }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }
+
   const iniciarEscanerBarras = useCallback(async () => {
-    setModo("barras");
-    setEstado("buscando-barras");
+    setCameraLista(false);
     setError("");
-    setMensajeBarras("Iniciando camara...");
+    setEstado("escaneando");
 
     try {
       const ZXing = await import("@zxing/browser" as never) as {
@@ -60,9 +64,8 @@ export default function Escaner() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
+        setCameraLista(true);
       }
-
-      setMensajeBarras("Apunta al codigo de barras del producto");
 
       scanIntervalRef.current = setInterval(async () => {
         if (!videoRef.current || !canvasRef.current || !zxingRef.current) return;
@@ -83,26 +86,18 @@ export default function Escaner() {
             await buscarEnOpenBeautyFacts(codigo);
           }
         } catch {
-          // sin codigo todavia
+          // sin código todavía
         }
       }, 500);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error desconocido";
-      setError("No se pudo iniciar la camara: " + msg);
+      setError("No se pudo acceder a la cámara: " + msg);
       setEstado("error");
-      setModo("elegir");
     }
   }, []);
 
-  function detenerCamara() {
-    if (scanIntervalRef.current) { clearInterval(scanIntervalRef.current); scanIntervalRef.current = null; }
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-  }
-
   async function buscarEnOpenBeautyFacts(codigo: string) {
-    setMensajeBarras("Codigo " + codigo + " detectado, buscando producto...");
-    setEstado("buscando-barras");
+    setEstado("procesando-ocr");
     try {
       const res = await fetch("https://world.openbeautyfacts.org/api/v0/product/" + codigo + ".json");
       const data = await res.json();
@@ -115,25 +110,20 @@ export default function Escaner() {
         setProductoEncontrado(producto);
         setTextoExtraido(producto.ingredientesTexto);
         setEstado("listo");
-        setModo("barras");
       } else {
-        setError("Producto (" + codigo + ") no esta en la base de datos global. Puedes fotografiar la etiqueta manualmente.");
+        setError("Producto (" + codigo + ") no está en la base de datos. Fotografía la etiqueta.");
         setEstado("error");
-        setModo("elegir");
+        iniciarEscanerBarras();
       }
     } catch {
-      setError("Error de conexion al buscar el producto. Comprueba tu internet.");
+      setError("Error de conexión. Comprueba tu internet.");
       setEstado("error");
-      setModo("elegir");
+      iniciarEscanerBarras();
     }
   }
 
-  // ── Comprimir imagen antes de enviar ─────────────────────────────────────
-  // Devuelve SOLO los bytes en base64 (sin prefijo "data:image/jpeg;base64,"),
-  // que es el formato que exige Google Vision.
   const comprimirImagen = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
-      console.log(`[Escaner] Archivo: ${file.name} | tipo: ${file.type} | ${Math.round(file.size / 1024)} KB`);
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
@@ -151,63 +141,45 @@ export default function Escaner() {
         ctx.drawImage(img, 0, 0, width, height);
         URL.revokeObjectURL(url);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-        const base64 = dataUrl.split(",")[1];
-        console.log(`[Escaner] Imagen comprimida: ${width}x${height} | base64: ${base64.length} chars`);
-        resolve(base64);
+        resolve(dataUrl.split(",")[1]);
       };
       img.onerror = () => {
         URL.revokeObjectURL(url);
-        reject(new Error("No se pudo leer la imagen. Si es una foto de iPhone (HEIC), haz una captura de pantalla de la foto y sube la captura."));
+        reject(new Error("No se pudo leer la imagen. Si es HEIC, sube una captura de pantalla."));
       };
       img.src = url;
     });
   };
 
-  // ── OCR con Google Vision (via API propia) ────────────────────────────────
   const procesarImagen = useCallback(async (file: File) => {
+    detenerCamara();
     setEstado("procesando-ocr");
     setError("");
     setImagenUrl(URL.createObjectURL(file));
-    setMensajeOCR("Preparando imagen...");
 
     try {
-      // Comprimir imagen para no superar límite de Vercel (4.5MB)
       const base64 = await comprimirImagen(file);
-      setMensajeOCR("Leyendo etiqueta...");
-
-      console.log("[Escaner] Enviando imagen a /api/ocr-ingredientes...");
       const res = await fetch("/api/ocr-ingredientes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imagenBase64: base64 }),
       });
-
       const data = await res.json();
-      console.log(`[Escaner] Respuesta OCR: HTTP ${res.status} | motor: ${data.motor ?? "-"} | texto: ${data.texto?.length ?? 0} chars`);
-
-      if (!res.ok) {
-        throw new Error(data.error || "No se pudo leer la imagen.");
-      }
-
-      if (!data.texto || data.texto.length < 10) {
-        throw new Error("No se detectó texto. Intenta con una foto más nítida y bien iluminada.");
-      }
+      if (!res.ok) throw new Error(data.error || "No se pudo leer la imagen.");
+      if (!data.texto || data.texto.length < 10) throw new Error("No se detectó texto. Intenta con mejor iluminación.");
 
       setTextoExtraido(data.texto);
       setEstado("listo");
     } catch (e) {
-      console.error("[Escaner] Error en el flujo OCR:", e);
       setError(e instanceof Error ? e.message : "Error al leer la imagen.");
       setEstado("error");
+      iniciarEscanerBarras();
     }
-  }, []);
+  }, [iniciarEscanerBarras]);
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file?.type.startsWith("image/")) {
-      setModo("foto");
-      procesarImagen(file);
-    }
+    if (file?.type.startsWith("image/")) procesarImagen(file);
   }
 
   function usarTexto() {
@@ -217,134 +189,189 @@ export default function Escaner() {
 
   function reiniciar() {
     detenerCamara();
-    setModo("elegir"); setEstado("idle");
-    setTextoExtraido(""); setImagenUrl(null);
-    setError(""); setProductoEncontrado(null);
+    setTextoExtraido("");
+    setImagenUrl(null);
+    setError("");
+    setProductoEncontrado(null);
+    iniciarEscanerBarras();
   }
 
   const estaListo = estado === "listo";
-  const hayError = estado === "error";
+  const estaProcesando = estado === "procesando-ocr";
+  const estaEscaneando = estado === "escaneando";
 
   return (
-    <div className="min-h-screen pb-nav" style={{ background: "var(--bg)" }}>
-      <div className="px-6 pt-12 pb-8">
-        <button
-          onClick={() => { reiniciar(); router.back(); }}
-          className="text-sm flex items-center gap-2 mb-8"
-          style={{ color: "var(--texto-suave)" }}
-        >
-          Atras
-        </button>
-        <h1 className="titulo-grande text-5xl" style={{ color: "var(--texto)" }}>
-          {modo === "barras" ? "Codigo" : "Fotografia"}
-        </h1>
-        <h1 className="titulo-grande text-5xl" style={{ color: "var(--oro)" }}>
-          {modo === "barras" ? "de barras" : "la etiqueta"}
-        </h1>
-        <div className="linea-oro mt-3" />
-      </div>
+    <div className="min-h-screen pb-nav" style={{ background: "#000", color: "#fff" }}>
 
-      <div className="px-6 pb-12 flex flex-col gap-6">
+      {/* Vista de cámara — ocupa toda la pantalla hasta los botones */}
+      {(estaEscaneando || !estaListo) && !estaProcesando && (
+        <div className="relative" style={{ height: "calc(100dvh - 80px)" }}>
 
-        {modo === "elegir" && !estaListo && (
-          <>
-            <div className="card" style={{ padding: "1.25rem" }}>
-              <p className="label-oro mb-1">Opcion 1 — Mas rapida</p>
-              <p className="text-sm mb-4" style={{ color: "var(--texto-suave)" }}>
-                Escanea el codigo de barras. La app busca los ingredientes automaticamente
-                en la base de datos global de productos de belleza.
-              </p>
-              <button onClick={iniciarEscanerBarras} className="btn-primary w-full">
-                Escanear codigo de barras
-              </button>
-            </div>
+          {/* Botón atrás */}
+          <button
+            onClick={() => { detenerCamara(); router.back(); }}
+            className="absolute top-12 left-5 z-20 flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-full"
+            style={{ background: "rgba(0,0,0,0.5)", color: "#fff", backdropFilter: "blur(6px)" }}
+          >
+            ← Atrás
+          </button>
 
-            <div className="card" style={{ padding: "1.25rem" }}>
-              <p className="label-oro mb-1">Opcion 2 — Fotografiar etiqueta</p>
-              <p className="text-sm mb-4" style={{ color: "var(--texto-suave)" }}>
-                Fotografia la lista de ingredientes del envase. Google Vision lee el texto automaticamente.
-              </p>
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => {
-                    fileInputRef.current?.setAttribute("capture", "environment");
-                    fileInputRef.current?.click();
-                  }}
-                  className="btn-outline"
-                >
-                  📷 Abrir camara
-                </button>
-                <button
-                  onClick={() => {
-                    fileInputRef.current?.removeAttribute("capture");
-                    fileInputRef.current?.click();
-                  }}
-                  className="btn-outline"
-                >
-                  🖼️ Elegir de la galeria
-                </button>
+          {/* Video */}
+          <video
+            ref={videoRef}
+            className="w-full h-full"
+            style={{ objectFit: "cover", opacity: cameraLista ? 1 : 0, transition: "opacity 0.3s" }}
+            playsInline
+            muted
+          />
+          <canvas ref={canvasRef} className="hidden" />
+
+          {/* Overlay oscuro con recuadro de escaneo */}
+          {estaEscaneando && cameraLista && (
+            <div className="absolute inset-0 pointer-events-none" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {/* sombra alrededor del recuadro */}
+              <div style={{
+                position: "absolute", inset: 0,
+                background: "rgba(0,0,0,0.45)",
+                maskImage: "radial-gradient(ellipse 60% 25% at 50% 50%, transparent 100%, black 100%)",
+                WebkitMaskImage: "radial-gradient(ellipse 60% 25% at 50% 50%, transparent 100%, black 100%)",
+              }} />
+              {/* recuadro dorado */}
+              <div style={{
+                width: "72%", height: "22%", minHeight: 80, maxHeight: 160,
+                border: "2.5px solid var(--oro)",
+                borderRadius: 12,
+                boxShadow: "0 0 0 9999px rgba(0,0,0,0.4)",
+                position: "relative",
+              }}>
+                {/* esquinas decorativas */}
+                {["top-0 left-0", "top-0 right-0", "bottom-0 left-0", "bottom-0 right-0"].map((pos, i) => (
+                  <span key={i} className={`absolute ${pos}`} style={{
+                    width: 18, height: 18,
+                    borderTop: i < 2 ? "3px solid var(--oro)" : "none",
+                    borderBottom: i >= 2 ? "3px solid var(--oro)" : "none",
+                    borderLeft: i % 2 === 0 ? "3px solid var(--oro)" : "none",
+                    borderRight: i % 2 === 1 ? "3px solid var(--oro)" : "none",
+                    borderRadius: i === 0 ? "4px 0 0 0" : i === 1 ? "0 4px 0 0" : i === 2 ? "0 0 0 4px" : "0 0 4px 0",
+                  }} />
+                ))}
               </div>
             </div>
+          )}
 
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
-          </>
-        )}
+          {/* Mensaje de estado bajo el recuadro */}
+          {estaEscaneando && cameraLista && (
+            <div className="absolute bottom-28 left-0 right-0 text-center px-6">
+              <p className="text-sm font-medium" style={{ color: "var(--oro)" }}>
+                Centra el código de barras en el recuadro
+              </p>
+            </div>
+          )}
 
-        {/* Error */}
-        {hayError && (
-          <div className="p-4 text-sm" style={{ background: "var(--rojo-bg)", color: "var(--rojo)", border: "1px solid var(--rojo-borde)", borderRadius: "6px" }}>
-            <p className="label mb-1" style={{ color: "var(--rojo)" }}>No se pudo leer</p>
-            <p>{error}</p>
-            <button onClick={reiniciar} className="btn-outline mt-3 w-full">Intentar de nuevo</button>
-          </div>
-        )}
-
-        {/* Escaner de barras */}
-        {modo === "barras" && !estaListo && (
-          <div className="card text-center py-6">
-            <div className="relative mx-auto mb-4" style={{ maxWidth: 320, borderRadius: 8, overflow: "hidden", background: "#000" }}>
-              <video ref={videoRef} className="w-full" style={{ maxHeight: 240, objectFit: "cover" }} playsInline muted />
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-                <div style={{ width: "70%", height: "30%", border: "2px solid var(--oro)", borderRadius: 6, boxShadow: "0 0 0 9999px rgba(0,0,0,0.35)" }} />
+          {/* Spinner si la cámara aún no carga */}
+          {estaEscaneando && !cameraLista && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-4">
+                <div className="flex gap-2">
+                  {[0, 1, 2].map((i) => (
+                    <span key={i} style={{
+                      width: 8, height: 8, borderRadius: "50%",
+                      background: "var(--oro)", display: "inline-block",
+                      animation: "pulseDot 1.2s ease-in-out infinite",
+                      animationDelay: `${i * 0.2}s`,
+                    }} />
+                  ))}
+                </div>
+                <p className="text-sm" style={{ color: "rgba(255,255,255,0.7)" }}>Iniciando cámara...</p>
               </div>
             </div>
-            <canvas ref={canvasRef} className="hidden" />
-            <p className="label mb-2" style={{ color: "var(--oro)" }}>{mensajeBarras}</p>
-            <p className="text-xs mb-4" style={{ color: "var(--texto-suave)" }}>Centra el codigo dentro del recuadro dorado</p>
-            <button onClick={reiniciar} className="btn-outline">Cancelar</button>
-          </div>
-        )}
+          )}
 
-        {/* Procesando OCR */}
-        {estado === "procesando-ocr" && (
-          <div className="card text-center py-10">
-            {imagenUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={imagenUrl} alt="" className="mx-auto mb-6 rounded max-h-40 object-contain" />
-            )}
-            <div className="flex justify-center gap-2 mb-4">
-              {[0, 1, 2].map((i) => (
-                <span key={i} style={{
-                  width: 8, height: 8, borderRadius: "50%",
-                  background: "var(--oro)",
-                  display: "inline-block",
-                  animation: "pulseDot 1.2s ease-in-out infinite",
-                  animationDelay: `${i * 0.2}s`,
-                }} />
-              ))}
+          {/* Error flotante */}
+          {estado === "error" && error && (
+            <div className="absolute top-24 left-4 right-4 z-20 p-3 rounded-xl text-sm text-center"
+              style={{ background: "rgba(220,38,38,0.85)", color: "#fff", backdropFilter: "blur(6px)" }}>
+              {error}
             </div>
-            <p className="label mb-2" style={{ color: "var(--oro)" }}>{mensajeOCR}</p>
-            <p className="text-xs" style={{ color: "var(--texto-suave)" }}>Estamos leyendo la etiqueta, un momento...</p>
-          </div>
-        )}
+          )}
 
-        {/* Resultado listo */}
-        {estaListo && (
-          <div className="flex flex-col gap-4">
+          {/* Barra de acciones inferior — estilo Yuka */}
+          <div className="absolute bottom-0 left-0 right-0 flex items-center justify-around px-6 py-4"
+            style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}>
+
+            {/* Galería */}
+            <button
+              onClick={() => { fileInputRef.current?.removeAttribute("capture"); fileInputRef.current?.click(); }}
+              className="flex flex-col items-center gap-1"
+              style={{ color: "rgba(255,255,255,0.85)" }}
+            >
+              <span style={{ fontSize: 26 }}>🖼️</span>
+              <span className="text-xs">Galería</span>
+            </button>
+
+            {/* Botón central grande — Cámara para OCR */}
+            <button
+              onClick={() => { fileInputRef.current?.setAttribute("capture", "environment"); fileInputRef.current?.click(); }}
+              style={{
+                width: 64, height: 64, borderRadius: "50%",
+                background: "var(--oro)",
+                border: "3px solid #fff",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 26,
+                boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+              }}
+            >
+              📷
+            </button>
+
+            {/* Placeholder para equilibrar layout */}
+            <div style={{ width: 48 }} />
+          </div>
+        </div>
+      )}
+
+      {/* Procesando OCR */}
+      {estaProcesando && (
+        <div className="flex flex-col items-center justify-center min-h-screen gap-6 px-6">
+          {imagenUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imagenUrl} alt="" className="rounded-xl max-h-52 object-contain" />
+          )}
+          <div className="flex gap-2">
+            {[0, 1, 2].map((i) => (
+              <span key={i} style={{
+                width: 10, height: 10, borderRadius: "50%",
+                background: "var(--oro)", display: "inline-block",
+                animation: "pulseDot 1.2s ease-in-out infinite",
+                animationDelay: `${i * 0.2}s`,
+              }} />
+            ))}
+          </div>
+          <p className="text-base font-medium" style={{ color: "var(--oro)" }}>Leyendo etiqueta...</p>
+          <p className="text-sm text-center" style={{ color: "rgba(255,255,255,0.55)" }}>
+            Estamos extrayendo los ingredientes
+          </p>
+        </div>
+      )}
+
+      {/* Resultado listo */}
+      {estaListo && (
+        <div className="flex flex-col min-h-screen" style={{ background: "var(--bg)", color: "var(--texto)" }}>
+          <div className="px-6 pt-12 pb-4">
+            <button
+              onClick={reiniciar}
+              className="text-sm flex items-center gap-2 mb-6"
+              style={{ color: "var(--texto-suave)" }}
+            >
+              ← Escanear otro
+            </button>
+
             {productoEncontrado && (
-              <div className="card" style={{ padding: "1rem", background: "var(--verde-bg)", border: "1px solid var(--verde-borde)" }}>
-                <p className="label-oro mb-1" style={{ color: "var(--verde)" }}>Producto encontrado</p>
-                <p className="font-semibold" style={{ color: "var(--texto)" }}>{productoEncontrado.nombre}</p>
+              <div className="p-4 rounded-xl mb-4" style={{ background: "var(--verde-bg)", border: "1px solid var(--verde-borde)" }}>
+                <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: "var(--verde)" }}>
+                  Producto encontrado ✓
+                </p>
+                <p className="font-semibold text-base" style={{ color: "var(--texto)" }}>{productoEncontrado.nombre}</p>
                 {productoEncontrado.marca && (
                   <p className="text-xs mt-0.5" style={{ color: "var(--texto-suave)" }}>{productoEncontrado.marca}</p>
                 )}
@@ -353,13 +380,13 @@ export default function Escaner() {
 
             {imagenUrl && !productoEncontrado && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={imagenUrl} alt="" className="rounded max-h-36 object-contain mx-auto" />
+              <img src={imagenUrl} alt="" className="rounded-xl max-h-36 object-contain mx-auto mb-4" />
             )}
 
-            <div className="card">
+            <div className="card mb-4">
               <div className="flex items-center justify-between mb-3">
-                <p className="label">Texto detectado</p>
-                <span className="text-xs font-bold px-2 py-1" style={{ background: "var(--verde)", color: "var(--bg)", borderRadius: "3px" }}>
+                <p className="label">Ingredientes detectados</p>
+                <span className="text-xs font-bold px-2 py-1" style={{ background: "var(--verde)", color: "var(--bg)", borderRadius: 4 }}>
                   Listo
                 </span>
               </div>
@@ -370,21 +397,21 @@ export default function Escaner() {
                 style={{ resize: "vertical", fontSize: "0.8rem" }}
               />
               <p className="text-xs mt-2" style={{ color: "var(--texto-suave)" }}>
-                Revisa que los ingredientes esten correctos. Puedes editar si hay errores.
+                Revisa que los ingredientes estén correctos. Puedes editar si hay errores.
               </p>
             </div>
 
-            <button onClick={usarTexto} className="btn-primary">Analizar estos ingredientes →</button>
-            <button onClick={reiniciar} className="btn-outline">Escanear otro producto</button>
+            <button onClick={usarTexto} className="btn-primary w-full mb-3">
+              Analizar estos ingredientes →
+            </button>
+            <button onClick={reiniciar} className="btn-outline w-full">
+              Escanear otro producto
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
-        <div className="divisor" />
-        <p className="text-xs text-center" style={{ color: "var(--texto-suave)", lineHeight: 1.7 }}>
-          El codigo de barras consulta Open Beauty Facts.<br />
-          La foto usa Google Vision para leer la etiqueta.
-        </p>
-      </div>
+      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
       <BottomNav />
     </div>
   );
